@@ -11,6 +11,7 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from sleepy_eyes_detection import eye_closed_check
 from yawning_detection import yawning,mouth_ratio_calculation,mouth
+from head_pose_detection import is_head_drooping
 
 #this just downloads the model dont get worried buddy
 model_url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
@@ -36,14 +37,18 @@ while True:
         eyes_closed,ear=eye_closed_check(driver_landmarks,driver_frame_w,driver_frame_h)
         mar=mouth_ratio_calculation(mouth, driver_landmarks,driver_frame_w,driver_frame_h)
         too_many_yawns,yawn_count=yawning(mar,time.time())
+        head_drooping,pitch=is_head_drooping(driver_landmarks,driver_frame_w,driver_frame_h)
         if eyes_closed:
             cv2.putText(driver_frame, "hey wake up!!", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
         if too_many_yawns:
             cv2.putText(driver_frame, "stop yawning!!", (30, 120), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
             yawn_count=0
+        if head_drooping:
+            cv2.putText(driver_frame, "head drooping!!", (30,160), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,255), 3)
         cv2.putText(driver_frame, f"ear: {ear:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         cv2.putText(driver_frame, f"yawns: {yawn_count}", (30, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         cv2.putText(driver_frame, f"mar: {mar:.2f}", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.putText(driver_frame, f"pitch: {pitch:.2f}", (30,80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
     cv2.imshow("S.O.B.E.R", driver_frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
