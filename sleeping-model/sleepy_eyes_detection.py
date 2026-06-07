@@ -7,7 +7,7 @@ shut_for=0
 
 #function names are there for a reason you dont need a comment
 #just read it I am not explaining
-def eye_ratio_calcilations(which_eye_indices,all_the_landmarks,frame_width,frame_height):
+def eye_ratio_calcilation(which_eye_indices,all_the_landmarks,frame_width,frame_height):
     point0=(int(all_the_landmarks[which_eye_indices[0]].x*frame_width), int(all_the_landmarks[which_eye_indices[0]].y*frame_height))
     point1=(int(all_the_landmarks[which_eye_indices[1]].x*frame_width), int(all_the_landmarks[which_eye_indices[1]].y*frame_height))
     point2=(int(all_the_landmarks[which_eye_indices[2]].x*frame_width), int(all_the_landmarks[which_eye_indices[2]].y*frame_height))
@@ -22,8 +22,8 @@ def eye_ratio_calcilations(which_eye_indices,all_the_landmarks,frame_width,frame
 
 def eye_closed_check(found_landmarks,frame_width,frame_height):
     global shut_for
-    left_eye_score=eye_ratio_calcilations(L_EYE,found_landmarks,frame_width,frame_height)
-    right_eye_score=eye_ratio_calcilations(R_EYE,found_landmarks,frame_width,frame_height)
+    left_eye_score=eye_ratio_calcilation(L_EYE,found_landmarks,frame_width,frame_height)
+    right_eye_score=eye_ratio_calcilation(R_EYE,found_landmarks,frame_width,frame_height)
     both_eye_score=(left_eye_score+right_eye_score)/2.0
     if left_eye_score < blink_cutoff and right_eye_score < blink_cutoff:
         shut_for=shut_for+1
