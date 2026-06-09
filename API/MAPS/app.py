@@ -1,8 +1,15 @@
-from flask import Flask, request,jsonify
-from main import build_features, calculate_risk, get_routes, sample_waypoints, get_bars, get_accident_density, get_weather, get_time_features
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from main import build_features, calculate_risk, predict_severity, get_routes, sample_waypoints, get_bars, get_accident_density, get_weather, get_time_features, get_cached_overpass
 import concurrent.futures, time
 
 app= Flask(__name__)
+CORS(app)
+
+@app.route("/health")
+def health():
+    return jsonify({"status":"ok", "endpoints": ["/risk", "/safe_route", "/health"]})
+
 
 @app.route("/risk", methods=["GET"])
 def risk():
@@ -21,11 +28,25 @@ def risk():
         features["temperature"]
     )
 
+    predicted_severity, severity_confidence = predict_severity(
+        features["hour"],
+        features["is_weekend"],
+        features["temperature"],
+        features["rain"],
+        features["wind_speed"],
+        features["bars"],
+        features["accident_density"]
+    )
+
     return jsonify({
         "risk_score":score,
         "risk_level":risk_level,
         "reasons": reasons,
         "action": action,
+        "ml_prediction":{
+            "predicted_severity": predicted_severity,
+            "confidence": severity_confidence
+        },
         "features":features
     })
 
@@ -104,29 +125,6 @@ def safe_route():
         "recommended_route": 0,
         "routes": scored_routes
     })
-
-@app.route("/test_overpass")
-def test_overpass():
-    import requests
-    results = {}
-    endpoints = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-    ]
-    query = "[out:json];node[amenity=bar](around:500,40.758,-73.985);out count;"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json",
-        "User-Agent": "SOBER-Project/1.0"
-    }
-    for ep in endpoints:
-        try:
-            r = requests.post(ep, data={"data": query}, headers=headers, timeout=10)
-            results[ep] = f"Status {r.status_code} — {r.text[:100]}"
-        except Exception as e:
-            results[ep] = f"ERROR: {str(e)[:100]}"
-    return jsonify(results)
 
 if __name__ == "__main__":
     app.run(debug=True)

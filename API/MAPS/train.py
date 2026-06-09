@@ -4,99 +4,96 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
-import requests
-import time
+import os
 
-def get_historical_weather(lat, lon, date, hour):
-    """Get historical weather for a specific location and time"""
-    try:
-        url = (
-            f"https://archive-api.open-meteo.com/v1/archive"
-            f"?latitude={lat}&longitude={lon}"
-            f"&start_date={date}&end_date={date}"
-            f"&hourly=temperature_2m,weather_code,wind_speed_10m"
-        )
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        hourly = data.get("hourly",{})
-        temperature = hourly.get("temperature_2m", [20])[hour]
-        weather_code = hourly.get("weather_code", [0])[hour]
-        wind_speed = hourly.get("wind_speed_10m", [0])[hour]
-        rain =1 if weather_code in [51,53,55,61,63,65,80,81,82] else 0
-        return temperature, rain, wind_speed
-    except Exception as e:
-        return 20, 0, 0
-    
+def compute_accident_density_against(lats, lons, ref_lats, ref_lons, radius_km=1.0):
+    print("Computing real accident density against 50k records...")
+    R = 6371
+    lats_r = np.radians(lats)
+    lons_r = np.radians(lons)
+    ref_lats_r = np.radians(ref_lats)
+    ref_lons_r = np.radians(ref_lons)
+    densities = []
+
+    for i in range(len(lats)):
+        dlat = ref_lats_r - lats_r[i]
+        dlon = ref_lons_r - lons_r[i]
+        a = np.sin(dlat/2)**2 + np.cos(lats_r[i]) * np.cos(ref_lats_r) * np.sin(dlon/2)**2
+        dist = 2 * R * np.arcsin(np.sqrt(a))
+        count = int(np.sum(dist <= radius_km))
+        densities.append(count)
+        if i % 500 == 0:
+            print(f"  Density: {i}/{len(lats)}")
+
+    return densities
+
 def build_training_data():
-    print("Loading crash data...")
-    df = pd.read_csv("crashes.csv")
+    print("Loading crash data with weather...")
 
-    df["crash_date"] = pd.to_datetime(df["crash_date"])
-    df["hour"] = pd.to_datetime(df["crash_time"], format="%H:%M", errors="coerce").dt.hour
-    df["day_of_week"] = df["crash_date"].dt.dayofweek
-    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
-    df["date_str"] = df["crash_date"].dt.strftime("%Y-%m-%d")
-    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-    df = df.dropna(subset=["latitude", "longitude" ,"hour"])
+    if not os.path.exists("crashes_with_weather.csv"):
+        print("crashes_with_weather.csv not found")
+        return None
 
-    df["crashed"] = 1
+    crashes = pd.read_csv("crashes_with_weather.csv")
+    print(f"Loaded {len(crashes)} records")
 
-    crashes = df.sample(n=min(5000, len(df)), random_state=42).reset_index(drop=True)
-    print(f"Using {len(crashes)} crash records")
+    # Build severity label from real data
+    crashes["number_of_persons_injured"] = pd.to_numeric(
+        crashes["number_of_persons_injured"], errors="coerce").fillna(0)
+    crashes["number_of_persons_killed"] = pd.to_numeric(
+        crashes["number_of_persons_killed"], errors="coerce").fillna(0)
 
-    print("Generating non-crash scenarios...")
-    non_crashes=[]
-    for _ in range(len(crashes)):
-        non_crashes.append({
-            "hour": np.random.randint(0,24),
-            "is_weekend": np.random.randint(0,2),
-            "temperature": np.random.uniform(0,40),
-            "rain": np.random.choice([0,1], p=[0.85, 0.15]),
-            "wind_speed": np.random.uniform(0,50),
-            "bars": np.random.randint(0,200),
-            "accident_density": np.random.randint(0,300),
-            "crashed": 0
-        })
-    non_crash_df = pd.DataFrame(non_crashes)
+    def label_severity(row):
+        if row["number_of_persons_killed"] > 0:
+            return 2  # fatal
+        elif row["number_of_persons_injured"] > 0:
+            return 1  # injury
+        else:
+            return 0  # property damage only
 
-    print("Fetching historical weather for cashes (this takes a few minutes)...")
-    temperatures, rains, wind_speeds = [], [], []
-    for i, row in crashes.iterrows():
-        if i % 100 == 0:
-            print(f" Weather: {i}/{len(crashes)}")
-        temp, rain, wind = get_historical_weather(
-            row["latitude"], row["longitude"], 
-            row["date_str"], int(row["hour"])
-        )
-        temperatures.append(temp)
-        rains.append(rain)
-        wind_speeds.append(wind)
-        time.sleep(0.05)
-    
-    crashes = crashes.copy()
-    crashes["temperature"] = temperatures
-    crashes["rain"] = rains
-    crashes["wind_speed"] = wind_speeds
+    crashes["severity"] = crashes.apply(label_severity, axis=1)
 
-    crashes["bars"] = np.random.randint(0,200, size=len(crashes))
-    crashes["accident_density"] = np.random.randint(0,300, size=len(crashes))
-    crashes.to_csv("crashes_with_weather.csv", index=False)  #
-    print("Weather data saved to crashes_with_weather.csv")
-    crash_features = crashes[["hour", "is_weekend", "temperature", "rain", "wind_speed", "bars", "accident_density", "crashed"]].copy()
-    full_df = pd.concat([crash_features, non_crash_df], ignore_index=True)
-    full_df.to_csv("training_data.csv", index=False)
-    print(f"Training data saved - {len(full_df)} rows")
-    return full_df
+    print("\nSeverity distribution:")
+    print(crashes["severity"].value_counts())
+
+    crashes["hour"] = crashes["hour"].fillna(0).astype(int)
+    crashes["is_weekend"] = crashes["is_weekend"].fillna(0).astype(int)
+
+    # Real accident density
+    print("\nLoading full 50k for density...")
+    full_crashes = pd.read_csv("crashes.csv")
+    full_crashes["latitude"] = pd.to_numeric(full_crashes["latitude"], errors="coerce")
+    full_crashes["longitude"] = pd.to_numeric(full_crashes["longitude"], errors="coerce")
+    full_crashes = full_crashes.dropna(subset=["latitude", "longitude"])
+
+    densities = compute_accident_density_against(
+        crashes["latitude"].values,
+        crashes["longitude"].values,
+        full_crashes["latitude"].values,
+        full_crashes["longitude"].values
+    )
+    crashes["accident_density"] = densities
+    print(f"Density done — avg: {np.mean(densities):.1f}")
+
+    crashes["bars"] = np.random.randint(0, 200, size=len(crashes))
+
+    crashes.to_csv("training_data.csv", index=False)
+    print(f"Training data saved — {len(crashes)} rows")
+    return crashes
 
 def train_model(df):
-    print("\nTraining Random Forest model...")
-    features = ["hour", "is_weekend", "temperature", "rain", "wind_speed", "bars", "accident_density"]
+    print("\nTraining severity prediction model...")
+    features = ["hour", "is_weekend", "temperature", "rain",
+                 "wind_speed", "bars", "accident_density"]
     X = df[features]
-    y = df["crashed"]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    y = df["severity"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
     model = RandomForestClassifier(
-        n_estimators=100, 
+        n_estimators=100,
         max_depth=10,
         random_state=42,
         n_jobs=-1
@@ -105,11 +102,13 @@ def train_model(df):
 
     print("\nModel Performance:")
     y_pred = model.predict(X_test)
-    print(classification_report(y_test, y_pred))
+    print(classification_report(y_test, y_pred, 
+          target_names=["Property damage", "Injury", "Fatal"]))
 
     print("\nFeature Importance:")
-    for feat, imp in sorted(zip(features, model.feature_importances_), key=lambda x: x[1], reverse=True):
-        print(f"{feat}:{imp:.3f}")
+    for feat, imp in sorted(zip(features, model.feature_importances_),
+                            key=lambda x: x[1], reverse=True):
+        print(f"  {feat}: {imp:.3f}")
 
     joblib.dump(model, "model.pkl")
     print("\nModel saved as model.pkl")
@@ -117,5 +116,5 @@ def train_model(df):
 
 if __name__ == "__main__":
     df = build_training_data()
-    model = train_model(df)
-
+    if df is not None:
+        model = train_model(df)

@@ -2,14 +2,16 @@ import requests, time, random, math, joblib, os, numpy as np
 from datetime import datetime
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
-model = joblib.load(MODEL_PATH)
-print("ML model loaded successfully")
+try:
+    severity_model = joblib.load(MODEL_PATH)
+    print("ML model loaded successfully")
+except Exception as e:
+    severity_model = None
+    print(f"Model load failed: {e}")
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
 ]
-
-_cache = {}
 
 def get_overpass_url():
     return random.choice(OVERPASS_ENDPOINTS)
@@ -61,12 +63,12 @@ out count;"""
             response = requests.post(url, data={"data": query}, headers=headers, timeout=30)
             data = response.json()
             count = int(data.get("elements", [{}])[0].get("tags", {}).get("total", 0))
-            _cache[cache_key] = count
+            _overpass_cache[cache_key] = count
             return count
         except Exception as e:
             print(f"Bars error (attempt {attempt+1}): {e}")
             time.sleep(1)
-    cached = _cache.get(cache_key)
+    cached = _overpass_cache.get(cache_key)
     return cached if cached is not None else 0
 
 def get_accident_density(lat, lon, radius=2000):
@@ -90,13 +92,25 @@ out count;"""
             response = requests.post(url, data={"data": query}, headers=headers, timeout=30)
             data = response.json()
             count = int(data.get("elements", [{}])[0].get("tags", {}).get("total", 0))
-            _cache[cache_key] = count
+            _overpass_cache[cache_key] = count
             return count
         except Exception as e:
             print(f"Accident density error (attempt {attempt+1}): {e}")
             time.sleep(1)
-    cached = _cache.get(cache_key)
+    cached = _overpass_cache.get(cache_key)
     return cached if cached is not None else 0
+
+def get_cached_overpass(lat,lon):
+    key = (round(lat,2), round(lon,2))
+    if key in _overpass_cache:
+        print(f"Cache hit for {key}")
+        return _overpass_cache[key]
+    bars = get_bars(lat,lon, radius = 1000)
+    accident_density = get_accident_density(lat, lon, radius=2000)
+    _overpass_cache[key] = (bars, accident_density)
+    return bars, accident_density
+
+_overpass_cache = {}
 
 def build_features(lat, lon):
     hour, day_of_week, is_weekend = get_time_features()
@@ -116,6 +130,34 @@ def build_features(lat, lon):
         "accident_density": accident_density
     }
 
+def predict_severity(hour, is_weekend, temperature, rain, wind_speed, bars, accident_density):
+    """ML severity prediction - runs alongside rule-based score"""
+    if severity_model is None:
+        return "unknown", 0.0
+    
+    features = np.array([[hour, is_weekend, temperature, rain, wind_speed, bars, accident_density]])
+    proba = severity_model.predict_proba(features)[0]
+    predicted_class = int(np.argmax(proba))
+    confidence = round(float(np.max(proba)), 2)
+
+    severity_map = {
+        0: "property_damage_only",
+        1: "injury_likely",
+        2: "fatal_risk"
+    }
+    return severity_map[predicted_class], confidence
+
+
+
+
+
+
+
+
+
+
+
+
 def calculate_risk(hour, is_weekend, rain, wind_speed, bars, accident_density, temperature):
     hour = hour or 0
     is_weekend = is_weekend or 0
@@ -123,14 +165,10 @@ def calculate_risk(hour, is_weekend, rain, wind_speed, bars, accident_density, t
     wind_speed = wind_speed or 0
     bars = bars or 0
     accident_density = accident_density or 0
-    temperature = temperature or 20
-    
-
-    features = np.array([[hour, is_weekend, temperature, rain, wind_speed, bars, accident_density]])
-    crash_probability = model.predict_proba(features)[0][1]  # probability of crash
-    risk = int(crash_probability * 80)  # convert to 0-100 score
-
+    temperature = temperature or 0
+    risk = 0
     reasons = []
+
     if hour >= 22 or hour <= 5:
         risk += 30
         reasons.append("Night-time driving (high DUI window)")
