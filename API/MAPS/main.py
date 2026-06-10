@@ -1,5 +1,8 @@
-import requests, time, random, math, joblib, os, numpy as np
+import requests, time, random, math, joblib, os, numpy as np, sqlite3
 from datetime import datetime
+import pandas as pd
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "sober.db")
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 try:
@@ -131,11 +134,12 @@ def build_features(lat, lon):
     }
 
 def predict_severity(hour, is_weekend, temperature, rain, wind_speed, bars, accident_density):
-    """ML severity prediction - runs alongside rule-based score"""
     if severity_model is None:
         return "unknown", 0.0
     
-    features = np.array([[hour, is_weekend, temperature, rain, wind_speed, bars, accident_density]])
+
+    features = pd.DataFrame([[hour, is_weekend, temperature, rain, wind_speed, bars, accident_density]],
+                            columns=["hour", "is_weekend", "temperature", "rain", "wind_speed", "bars", "accident_density"])
     proba = severity_model.predict_proba(features)[0]
     predicted_class = int(np.argmax(proba))
     confidence = round(float(np.max(proba)), 2)
@@ -146,17 +150,6 @@ def predict_severity(hour, is_weekend, temperature, rain, wind_speed, bars, acci
         2: "fatal_risk"
     }
     return severity_map[predicted_class], confidence
-
-
-
-
-
-
-
-
-
-
-
 
 def calculate_risk(hour, is_weekend, rain, wind_speed, bars, accident_density, temperature):
     hour = hour or 0
@@ -264,3 +257,69 @@ def sample_waypoints(geometry, num_points=6):
     sampled = [coords[i] for i in range(0, total, step)][:num_points]
     return [{"lat": c[1], "lon": c[0]} for c in sampled]
 
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS risk_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            endpoint TEXT,
+            latitude REAL,
+            longitude REAL,
+            hour INTEGER,
+            is_weekend INTEGER,
+            risk_score INTEGER,
+            risk_level TEXT,
+            bars INTEGER,
+            accident_density INTEGER,
+            temperature REAL,
+            rain INTEGER,
+            wind_speed REAL
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS route_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            origin_lat REAL,
+            origin_lon REAL,
+            dest_lat REAL,
+            dest_lon REAL,
+            routes_returned INTEGER,
+            recommended_risk_score INTEGER,
+            recommended_risk_level TEXT,
+            distance_km REAL,
+            duration_min REAL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("Database initialized")
+
+def log_risk(endpoint, lat, lon, hour, is_weekend, risk_score, risk_level, bars, accident_density, temperature, rain, wind_speed):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO risk_logs (endpoint, latitude, longitude, hour, is_weekend, risk_score, risk_level, bars, accident_density, temperature, rain, wind_speed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (endpoint, lat, lon, hour, is_weekend, risk_score, risk_level, bars, accident_density, temperature, rain, wind_speed))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"DB log error: {e}")
+
+def log_route(origin_lat, origin_lon, dest_lat, dest_lon, routes_returned, recommended_risk_score, recommended_risk_level, distance_km, duration_min):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO route_logs(origin_lat, origin_lon, dest_lat, dest_lon, routes_returned, recommended_risk_score, recommended_risk_level, distance_km, duration_min)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (origin_lat, origin_lon, dest_lat, dest_lon, routes_returned, recommended_risk_score, recommended_risk_level, distance_km, duration_min))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"DB route log error: {e}")
