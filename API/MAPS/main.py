@@ -1,6 +1,10 @@
 import requests, time, random, math, joblib, os, numpy as np, sqlite3
 from datetime import datetime
 import pandas as pd
+import threading
+
+active_alerts = []
+alert_lock = threading.Lock()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "sober.db")
 
@@ -323,3 +327,87 @@ def log_route(origin_lat, origin_lon, dest_lat, dest_lon, routes_returned, recom
         conn.close()
     except Exception as e:
         print(f"DB route log error: {e}")
+
+def check_weather_alerts(locations=None):
+    """"
+    Poll weather for a set of monitored locations.
+    If conditions change significantly, add an alert.
+    """
+
+    if locations is None:
+        locations = [
+            {"name": "Times Square", "lat": 40.7580, "lon": -73.9855},
+            {"name": "Downtown Dubai", "lat": 25.2048, "lon": 55.2708},
+            {"name": "JFK Airport", "lat": 40.6413, "lon": -73.7781},
+        ]
+    
+    new_alerts = []
+    for loc in locations:
+        try:
+            temperature, rain, wind_speed = get_weather(loc["lat"], loc["lon"])
+            alerts_for_loc = []
+
+            if rain:
+                alerts_for_loc.append({
+                    "type":"RAIN",
+                    "severity":"HIGH",
+                    "message": f"Rain detected at  {loc['name']} - reduced visiblity, increased crash risk"
+                })
+            if wind_speed > 30:
+                alerts_for_loc.append({
+                    "type":"HIGH_WIND",
+                    "severity":"HIGH",
+                    "message": f"High winds ({wind_speed} km/h) at {loc['name']} - dangerous driving conditions"
+                })
+            elif wind_speed > 20:
+                alerts_for_loc.append({
+                    "type":"MODERATE_WIND",
+                    "severity": "MEDIUM",
+                    "message": f"Moderate winds ({wind_speed} km/h) at {loc['name']} - drive with caution"
+                })
+            if temperature >=38:
+                alerts_for_loc.append({
+                    "type": "EXTREME_HEAT",
+                    "severity": "HIGH",
+                    "message": f"Extreme heat ({temperature}°C) at {loc['name']} - risk of tyre blowouts and driver fatigue"
+                })
+            if rain and wind_speed > 20:
+                alerts_for_loc.append({
+                    "type": "SEVER_CONDITIONS",
+                    "severity": "CRITICAL",
+                    "message": f"Combined rain + high wind at {loc['name']} - avoid driving if possible"
+                })
+            
+            for alert in alerts_for_loc:
+                alert["location"] = loc["name"]
+                alert["lat"] = loc["lat"]
+                alert["lon"] = loc["lon"]
+                alert["temperature"] = temperature
+                alert["wind_speed"] = wind_speed
+                alert["rain"] = bool(rain)
+                alert["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                new_alerts.append(alert)
+
+            print(f"Alert check: {loc['name']} - {len(alerts_for_loc)} alerts")
+
+        except Exception as e:
+            print(f"Alert check error for {loc['name']}: {e}")
+    
+    with alert_lock:
+        active_alerts.clear()
+        active_alerts.extend(new_alerts)
+
+    print(f"Alert system updated - {len(new_alerts)} active alerts")
+    return new_alerts
+
+def start_alert_poller(interval_minutes=30):
+    """Runs weather alert check every interval_minutes in background"""
+    def poller():
+        while True:
+            print("Running scheduled weather alert check...")
+            check_weather_alerts()
+            time.sleep(interval_minutes * 60)
+        
+    thread = threading.Thread(target=poller, daemon=True)
+    thread.start()
+    print(f"Alert poller started - checking every {interval_minutes} minutes")

@@ -2,11 +2,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from main import (build_features, calculate_risk, predict_severity, get_routes, 
                   sample_waypoints, get_bars, get_accident_density, get_weather,
-                    get_time_features, get_cached_overpass, init_db, log_risk, log_route, DB_PATH)
+                    get_time_features, get_cached_overpass, init_db, log_risk, log_route, DB_PATH,
+                    active_alerts, alert_lock, check_weather_alerts, start_alert_poller)
 import concurrent.futures, time
 import numpy as np, sqlite3
 
 init_db()
+check_weather_alerts()
+start_alert_poller(interval_minutes=30)
 
 app= Flask(__name__)
 CORS(app)
@@ -292,6 +295,28 @@ def stats():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/alerts", methods=["GET"])
+def alerts():
+    with alert_lock:
+        current_alerts = list(active_alerts)
+
+    return jsonify({
+        "total_alerts": len(active_alerts),
+        "alerts": current_alerts,
+        "monitored_locations": 3,
+        "next_check": "Every 30 minutes"
+    })
+
+@app.route("/alerts/check", methods=["GET"])
+def alerts_check():
+    """Manually trigger an alert check"""
+    new_alerts = check_weather_alerts()
+    return jsonify({
+        "total_alerts": len(new_alerts),
+        "alerts": new_alerts,
+        "message": "Alert check completed"
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -171,7 +171,7 @@
 
     // Leaflet map
     const map = L.map('map').setView([40.7128,-74.0060], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19, attribution:'© OpenStreetMap © CARTO'}).addTo(map);
     const layers = { risk: L.layerGroup().addTo(map), route: L.layerGroup().addTo(map), heat: L.layerGroup().addTo(map) };
 
     function placeRiskMarker(lat,lon,popup){ layers.risk.clearLayers(); L.marker([lat,lon]).addTo(layers.risk).bindPopup(popup||'risk').openPopup(); map.panTo([lat,lon]) }
