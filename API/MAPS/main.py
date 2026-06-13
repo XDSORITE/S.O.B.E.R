@@ -5,7 +5,9 @@ import threading
 
 active_alerts = []
 alert_lock = threading.Lock()
-
+routes_lock = threading.Lock()
+active_routes = {}
+ROUTE_CACHE_EXPIRY = 300
 DB_PATH = os.path.join(os.path.dirname(__file__), "sober.db")
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
@@ -29,6 +31,20 @@ def get_time_features():
     day_of_week = now.weekday()
     is_weekend = 1 if day_of_week >= 5 else 0
     return hour, day_of_week, is_weekend
+
+def get_engineered_time_features(hour):
+    if 5 <= hour < 12:
+        time_of_day = 0
+    elif 12 <= hour < 17:
+        time_of_day = 1
+    elif 17 <= hour < 22:
+        time_of_day = 2
+    else:
+        time_of_day = 3
+
+    is_night = 1 if (hour >= 22 or hour <= 5) else 0
+    is_rush_hour = 1 if ((7 <= hour <= 9) or (17 <= hour <= 19)) else 0
+    return time_of_day, is_night, is_rush_hour
 
 def get_weather(lat, lon):
     try:
@@ -121,6 +137,7 @@ _overpass_cache = {}
 
 def build_features(lat, lon):
     hour, day_of_week, is_weekend = get_time_features()
+    time_of_day, is_night, is_rush_hour = get_engineered_time_features(hour)
     temperature, rain, wind_speed = get_weather(lat, lon)
     bars = get_bars(lat, lon)
     accident_density = get_accident_density(lat, lon)
@@ -134,26 +151,41 @@ def build_features(lat, lon):
         "rain": rain,
         "wind_speed": wind_speed,
         "bars": bars,
-        "accident_density": accident_density
+        "accident_density": accident_density,
+        "time_of_day": time_of_day,
+        "is_night": is_night,
+        "is_rush_hour": is_rush_hour
     }
 
 def predict_severity(hour, is_weekend, temperature, rain, wind_speed, bars, accident_density):
     if severity_model is None:
         return "unknown", 0.0
     
+    def time_bucket(h):
+        if 5 <= h <12: return 0
+        elif 12 <= h <17: return 1
+        elif 17 <h < 22: return 2
+        else: return 3
+    
+    time_of_day = time_bucket(hour)
+    is_night = 1 if (hour >= 22 or hour <= 5) else 0
+    is_rush_hour = 1 if (7 <= hour <= 9 or 17 <= hour <=19) else 0
 
-    features = pd.DataFrame([[hour, is_weekend, temperature, rain, wind_speed, bars, accident_density]],
-                            columns=["hour", "is_weekend", "temperature", "rain", "wind_speed", "bars", "accident_density"])
+    features = pd.DataFrame([[
+        hour, is_weekend, temperature, rain, wind_speed, bars,
+        accident_density, time_of_day, is_night, is_rush_hour
+    ]], columns=[
+        "hour", "is_weekend", "temperature", "rain", "wind_speed", "bars",
+        "accident_density", "time_of_day", "is_night", "is_rush_hour"
+    ])
+
     proba = severity_model.predict_proba(features)[0]
     predicted_class = int(np.argmax(proba))
     confidence = round(float(np.max(proba)), 2)
 
-    severity_map = {
-        0: "property_damage_only",
-        1: "injury_likely",
-        2: "fatal_risk"
-    }
+    severity_map = {0: "property_damage_only", 1: "injury_likely", 2: "fatal_risk"}
     return severity_map[predicted_class], confidence
+ 
 
 def calculate_risk(hour, is_weekend, rain, wind_speed, bars, accident_density, temperature):
     hour = hour or 0
@@ -411,3 +443,53 @@ def start_alert_poller(interval_minutes=30):
     thread = threading.Thread(target=poller, daemon=True)
     thread.start()
     print(f"Alert poller started - checking every {interval_minutes} minutes")
+
+def get_crash_hotspots(top_k=10):
+    df = pd.read_csv("crashes.csv")
+    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+
+    df = df.dropna(subset=["latitude", "longitude"])
+    df = df[(df["latitude"] != 0) & (df["longitude"] != 0)] 
+    df = df[(df["latitude"].between(40.4, 41.0)) & (df["longitude"].between(-74.5, -73.5))]
+
+    df["lat_r"] = df["latitude"].round(3)
+    df["lon_r"] = df["longitude"].round(3)
+
+    hotspots = df.groupby(["lat_r", "lon_r"]).size().reset_index(name="crash_count")
+    hotspots = hotspots.sort_values("crash_count", ascending=False).head(top_k)
+    hotspots = hotspots.reset_index(drop=True)
+
+    return [
+        {
+            "rank": i+1,
+            "lat": row["lat_r"],
+            "lon": row["lon_r"],
+            "crash_count": int(row["crash_count"]),
+            "risk_level": "CRITICAL" if row["crash_count"] > 50 else
+                          "HIGH" if row["crash_count"] >20 else
+                          "MEDIUM"
+        }
+        for i, row in hotspots.iterrows()
+    ]
+
+def get_cached_route(route_id):
+    with routes_lock:
+        if route_id in active_routes:
+            cached = active_routes[route_id]
+            if time.time() - cached["last_updated"] < ROUTE_CACHE_EXPIRY:
+                print(f"Route cache hit: {route_id}")
+                return cached
+            else:
+                del active_routes[route_id]
+    return None
+
+def cache_route(route_id, data):
+    with routes_lock:
+        active_routes[route_id] = data
+
+        expired = [k for k, v in active_routes.items()
+                   if time.time() - v["last_updated"] > ROUTE_CACHE_EXPIRY]
+        for k in expired:
+            del active_routes[k]
+    

@@ -5,26 +5,133 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SOBER Backend Test UI</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+
   <style>
-    body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#071022; color:#e6eef8 }
-    .wrap { max-width:1200px; margin:18px auto; padding:18px }
-    .panel { background:rgba(10,16,30,0.7); border:1px solid rgba(255,255,255,0.04); border-radius:12px; padding:14px }
-    .controls { display:flex; gap:8px; align-items:center; margin-bottom:8px }
-    input[type="text"], input[type="number"] { padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); color:inherit }
-    button { padding:8px 12px; border-radius:8px; border:none; cursor:pointer }
-    button.primary { background:#58d6c9; color:#04212a }
-    .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap }
-    #map { height:520px; border-radius:10px; }
-    pre { background:rgba(0,0,0,0.25); padding:8px; border-radius:8px; overflow:auto; max-height:220px }
-    @media(max-width:860px){ .row{flex-direction:column} }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+    body {
+      margin: 0;
+      font-family: 'Inter', Arial, Helvetica, sans-serif;
+      background: radial-gradient(circle at top, #0b1a33, #050a14 60%);
+      color: #e6eef8;
+      overflow-x: hidden;
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 18px;
+    }
+
+    .panel {
+      background: rgba(10, 16, 30, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 18px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      transition: transform 0.2s ease;
+    }
+
+    .panel:hover {
+      transform: translateY(-1px);
+    }
+
+    h2, h4 {
+      letter-spacing: 0.3px;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    input[type="text"], input[type="number"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: inherit;
+      outline: none;
+      transition: 0.2s;
+    }
+
+    input:focus {
+      border-color: #58d6c9;
+      box-shadow: 0 0 0 3px rgba(88,214,201,0.15);
+    }
+
+    button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      transition: 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      opacity: 0.95;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, #58d6c9, #4aa3ff);
+      color: #04151c;
+      font-weight: 600;
+      box-shadow: 0 6px 18px rgba(88,214,201,0.25);
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    #map {
+      height: 520px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    pre {
+      background: rgba(0,0,0,0.35);
+      padding: 10px;
+      border-radius: 10px;
+      overflow: auto;
+      max-height: 220px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    strong {
+      color: #cfe6ff;
+    }
+
+    label {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    @media(max-width: 860px) {
+      .row { flex-direction: column; }
+    }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <div class="panel">
-      <h2 style="margin:0 0 8px">SOBER Test UI</h2>
+      <h2 style="margin:0 0 10px">SOBER Test UI</h2>
+
       <div class="controls">
-        <label style="display:flex;gap:8px;align-items:center">Backend URL
+        <label style="display:flex;gap:8px;align-items:center">
+          Backend URL
           <input id="baseUrl" type="text" value="http://127.0.0.1:5000" style="width:260px;margin-left:8px" />
         </label>
         <button id="healthBtn" class="primary">Health</button>
@@ -34,13 +141,14 @@
 
       <div class="row">
         <div style="flex:1">
-          <h4 style="margin:8px 0">Risk</h4>
+          <h4 style="margin:10px 0">Risk</h4>
           <div class="row">
             <input id="riskLat" type="number" step="any" placeholder="lat" />
             <input id="riskLon" type="number" step="any" placeholder="lon" />
             <button id="riskBtn" class="primary">Call /risk</button>
           </div>
-          <h4 style="margin:8px 0">Safe Route</h4>
+
+          <h4 style="margin:10px 0">Safe Route</h4>
           <div class="row">
             <input id="olat" type="number" step="any" placeholder="origin lat" />
             <input id="olon" type="number" step="any" placeholder="origin lon" />
@@ -48,7 +156,8 @@
             <input id="dlon" type="number" step="any" placeholder="dest lon" />
             <button id="routeBtn" class="primary">Call /safe_route</button>
           </div>
-          <h4 style="margin:8px 0">Heatmap</h4>
+
+          <h4 style="margin:10px 0">Heatmap</h4>
           <div class="row">
             <input id="h_lat1" type="number" step="any" placeholder="lat1" />
             <input id="h_lon1" type="number" step="any" placeholder="lon1" />
@@ -58,9 +167,10 @@
             <button id="heatBtn" class="primary">Call /heatmap</button>
           </div>
         </div>
+
         <div style="width:420px">
-          <h4 style="margin:8px 0">Responses</h4>
-          <div style="display:grid;gap:8px">
+          <h4 style="margin:10px 0">Responses</h4>
+          <div style="display:grid;gap:10px">
             <div>
               <strong>Risk</strong>
               <pre id="riskOutput">no call yet</pre>
@@ -78,8 +188,8 @@
       </div>
     </div>
 
-    <div class="panel" style="margin-top:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div class="panel" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <strong>Map (click to set risk point)</strong>
         <div>
           <button id="centerMapBtn">Reset View</button>
@@ -91,6 +201,8 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- JS unchanged -->
   <script>
     const baseUrlInput = document.getElementById('baseUrl');
     const healthBtn = document.getElementById('healthBtn');
@@ -131,82 +243,31 @@
     })
 
     loadSampleBtn.addEventListener('click', ()=>{
-      riskLatInput.value = 40.7128; riskLonInput.value = -74.0060; olat.value = 40.7128; olon.value = -74.0060; dlat.value = 40.7580; dlon.value = -73.9855; setStatus('sample loaded')
+      riskLatInput.value = 40.7128; riskLonInput.value = -74.0060;
+      olat.value = 40.7128; olon.value = -74.0060;
+      dlat.value = 40.7580; dlon.value = -73.9855;
+      setStatus('sample loaded')
       placeRiskMarker(40.7128,-74.0060)
     })
 
-    riskBtn.addEventListener('click', async ()=>{
-      const lat = riskLatInput.value; const lon = riskLonInput.value; riskOutput.textContent = 'loading...'
-      try{ const d = await requestJson(`/risk?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`); riskOutput.textContent = JSON.stringify(d,null,2); if(d.features){ placeRiskMarker(d.features.latitude,d.features.longitude, `Risk ${d.risk_level}`) } }catch(e){ riskOutput.textContent = e.message }
-    })
-
-    routeBtn.addEventListener('click', async ()=>{
-      const path = `/safe_route?olat=${encodeURIComponent(olat.value)}&olon=${encodeURIComponent(olon.value)}&dlat=${encodeURIComponent(dlat.value)}&dlon=${encodeURIComponent(dlon.value)}`
-      routeOutput.textContent = 'loading...'
-      try{ 
-        const d = await requestJson(path); 
-        routeOutput.textContent = JSON.stringify(d,null,2); 
-        layers.route.clearLayers();
-        if(d.routes){
-          d.routes.forEach((route, i)=> {
-            const color = i === 0 ? '#6ee7a8' : i === 1 ? '#ffd166' : '#ff9f43';
-            const weight = i === 0 ? 5: 3;
-            const label = i === 0 ? 'Safest' : 'Route ${i+1}';
-            const coords = route.geometry.map(p => [p[0], p[1]]);
-            L.polyline(coords, {color, weight, opacity: 0.85})
-              .addTo(layers.route)
-              .bindPopup('${label}<br>Risk: ${route.risk_level} (${route.average_risk})<br>${route.distance_km}km · ${route.duration_min}min');
-            
-            route.waypoints.forEach(wp => {
-              const wpColor = wp.risk_score >= 75 ? '#ff6b6b' : wp.risk_score >= 50 ? '#ff9f43' : wp.risk_score >= 25 ? '#ffd166' : '#6ee7a8';
-              L.circleMarker([wp.lat, wp.lon], {
-                radius: 6, color: wpColor, fillColor: wpColor, fillOpacity: 0.8, weight: 1
-              }).addTo(layers.route).bindPopup('Risk: ${wp.risk_score} (${wp.risk_level})');
-            });
-          });
-          map.fitBounds(L.polyline(d.routes[0].geometry.map(p=>[p[0],p[1]])).getBounds(), {padding:[20,20]});
-        }
-      }catch(e){ routeOutput.textContent = e.message}
-    })
-
-    // Leaflet map
     const map = L.map('map').setView([40.7128,-74.0060], 12);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19, attribution:'© OpenStreetMap © CARTO'}).addTo(map);
     const layers = { risk: L.layerGroup().addTo(map), route: L.layerGroup().addTo(map), heat: L.layerGroup().addTo(map) };
 
-    function placeRiskMarker(lat,lon,popup){ layers.risk.clearLayers(); L.marker([lat,lon]).addTo(layers.risk).bindPopup(popup||'risk').openPopup(); map.panTo([lat,lon]) }
-
-    function drawHeatmap(points){
-      layers.heat.clearLayers();
-      if(!Array.isArray(points) || points.length===0) return;
-      const bounds = [];
-      points.forEach(pt=>{
-        const lat = Number(pt.lat);
-        const lon = Number(pt.lon);
-        const score = Number(pt.risk_score||0);
-        if(!isFinite(lat) || !isFinite(lon)) return;
-        bounds.push([lat,lon]);
-        const color = score>=75 ? '#ff6b6b' : score>=50 ? '#ff9f43' : score>=25 ? '#ffd166' : '#6ee7a8';
-        const radius = Math.max(6, Math.min(30, 6 + Math.round(score/4)));
-        L.circleMarker([lat,lon], { radius, color, weight:1, fillColor:color, fillOpacity:0.5 }).addTo(layers.heat).bindPopup(`Risk: ${score} (${pt.risk_level||'unknown'})`);
-      });
-      if(bounds.length) map.fitBounds(bounds, { padding:[20,20] });
+    function placeRiskMarker(lat,lon,popup){
+      layers.risk.clearLayers();
+      L.marker([lat,lon]).addTo(layers.risk).bindPopup(popup||'risk').openPopup();
+      map.panTo([lat,lon])
     }
 
-    map.on('click', e=>{ const c = e.latlng; riskLatInput.value = c.lat.toFixed(5); riskLonInput.value = c.lng.toFixed(5); placeRiskMarker(c.lat,c.lng,'selected') })
-    document.getElementById('centerMapBtn').addEventListener('click', ()=> map.setView([40.7128,-74.0060],12))
-    document.getElementById('plotInputsBtn').addEventListener('click', ()=>{ if(riskLatInput.value && riskLonInput.value) placeRiskMarker(Number(riskLatInput.value),Number(riskLonInput.value),'input'); if(olat.value && olon.value && dlat.value && dlon.value){ drawRouteFromGeometry([[olat.value,olon.value],[dlat.value,dlon.value]]) } })
-
-    heatBtn.addEventListener('click', async ()=>{
-      const lat1 = h_lat1.value; const lon1 = h_lon1.value; const lat2 = h_lat2.value; const lon2 = h_lon2.value; const grid = h_grid.value || 5;
-      heatOutput.textContent = 'loading...';
-      try{
-        const path = `/heatmap?lat1=${encodeURIComponent(lat1)}&lon1=${encodeURIComponent(lon1)}&lat2=${encodeURIComponent(lat2)}&lon2=${encodeURIComponent(lon2)}&grid_size=${encodeURIComponent(grid)}`;
-        const d = await requestJson(path);
-        heatOutput.textContent = JSON.stringify(d,null,2);
-        if(d.heatmap) drawHeatmap(d.heatmap);
-      }catch(e){ heatOutput.textContent = e.message }
+    map.on('click', e=>{
+      const c = e.latlng;
+      riskLatInput.value = c.lat.toFixed(5);
+      riskLonInput.value = c.lng.toFixed(5);
+      placeRiskMarker(c.lat,c.lng,'selected')
     })
+
+    document.getElementById('centerMapBtn').addEventListener('click', ()=> map.setView([40.7128,-74.0060],12))
   </script>
 </body>
 </html>

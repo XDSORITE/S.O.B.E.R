@@ -38,6 +38,7 @@ def compute_accident_density_against(lats, lons, ref_lats, ref_lons, ref_weights
 
     return densities
 
+    
 def engineer_features(df):
     """Add engineered features to dataframe"""
 
