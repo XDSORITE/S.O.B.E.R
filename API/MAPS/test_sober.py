@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from main import calculate_risk, validate_coordinates, get_time_features
+from main import calculate_risk, validate_coordinates, get_time_features, get_crash_hotspots
 
 
 
@@ -161,3 +161,122 @@ class TestGetTimeFeatures:
     def test_is_weekend_is_binary(self):
         _, _, is_weekend = get_time_features()
         assert is_weekend in [0, 1]
+
+# GET_CRASH_HOTSPOTS TESTS
+
+class TestGetCrashHotspots:
+
+    def test_returns_list(self):
+        result = get_crash_hotspots(top_k=5)
+        assert isinstance(result, list)
+    
+    def test_returns_correct_count(self):
+        result = get_crash_hotspots(top_k=5)
+        assert len(result) == 5
+
+    def test_default_returns_10(self):
+        result = get_crash_hotspots()
+        assert len(result) == 10
+    
+    def test_hotspot_has_required_fields(self):
+        result = get_crash_hotspots(top_k=1)
+        hotspot = result[0]
+        assert "rank" in hotspot
+        assert "lat" in hotspot
+        assert "lon" in hotspot
+        assert "crash_count" in hotspot
+        assert "risk_level" in hotspot
+
+    def test_ranks_are_sequential(self):
+        result = get_crash_hotspots(top_k=5)
+        ranks = [h["rank"] for h in result]
+        assert ranks == [1, 2, 3, 4, 5]
+    
+    def test_sorted_by_crash_count_descending(self):
+        result = get_crash_hotspots(top_k=5)
+        counts = [h["crash_count"] for h in result]
+        assert counts == sorted(counts, reverse=True)
+    
+    def test_no_zero_coordinates(self):
+        result = get_crash_hotspots(top_k=10)
+        for h in result:
+            assert not (h["lat"] == 0 and h["lon"] == 0), "Zero coordinates should be filtered"
+
+    def test_coordinates_within_nyc_bounds(self):
+        result = get_crash_hotspots(top_k=10)
+        for h in result:
+            assert 40.4 <= h["lat"] <= 41.0, f"Lat {h['lat']} outside NYC bounds"
+            assert -74.5 <= h["lon"] <=-73.5, f"Lon {h['lon']} outside NYC bounds"
+    
+    def test_risk_levels_are_valid(self):
+        result = get_crash_hotspots(top_k=10)
+        valid_levels = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+        for h in result:
+            assert h["risk_level"] in valid_levels
+    
+    def test_crash_count_positive(self):
+        result = get_crash_hotspots(top_k=10)
+        for h in result:
+            assert h["crash_count"] > 0
+    
+    def test_top_k_zero_returns_empty(self):
+        result = get_crash_hotspots(top_k=0)
+        assert result == []
+    
+    def test_high_crash_count_is_critical_or_high(self):
+        result = get_crash_hotspots(top_k=1)
+        top = result[0]
+        assert top["risk_level"] in {"HIGH", "CRITICAL"}
+    
+#ADDITIONAL TESTS FOR EDGE CASES
+
+class TestCalculateRiskEdgeCases:
+
+    def test_midnight_saturday_is_highest_risk(self):
+        score_midnight_sat, _, _, _ = calculate_risk(0, 1, 0, 0, 0, 0, 20)
+        score_noon_monday, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 20)
+        assert score_midnight_sat > score_noon_monday
+    
+    def test_all_risk_factors_combined(self):
+        score, level, reasons, action = calculate_risk(23, 1, 1, 25, 100, 200, 40)
+        assert score == 100
+        assert level == "CRITICAL"
+        assert len(reasons) >= 4
+
+    def test_early_morning_is_high_risk(self):
+        score_3am, _, _, _ = calculate_risk(3, 0, 0, 0, 0, 0, 20)
+        score_10am, _, _, _ = calculate_risk(10, 0, 0, 0, 0, 0, 20)
+        assert score_3am > score_10am
+
+    def test_moderate_bars_adds_risk(self):
+        score_mod, _, _, _ = calculate_risk(12, 0, 0, 0, 10, 0, 20)
+        score_none, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 20)
+        assert score_mod > score_none
+
+    def test_high_temperature_adds_risk(self):
+        score_hot, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 39)
+        score_mild, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 25)
+        assert score_hot > score_mild
+
+    def test_risk_level_matches_score(self):
+        for hour in range(24):
+            score, level, _, _ = calculate_risk(hour, 0, 0, 0, 0, 0, 20) 
+            if score >= 75:
+                assert level == "CRITICAL"
+            elif score >= 50:
+                assert level == "HIGH"
+            elif score >= 25:
+                assert level == "MEDIUM"
+            else:
+                assert level == "LOW"
+
+    def test_zero_bars_adds_no_risk(self):
+        score_zero, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 20)
+        score_no_bars, _, _, _ = calculate_risk(12, 0, 0, 0, 0, 0, 20)
+        assert score_zero == score_no_bars 
+
+    def test_action_changes_with_risk_level(self):
+        _, _, _, action_safe = calculate_risk(12, 0, 0, 0, 0, 0, 20)
+        _, _, _, action_danger = calculate_risk(23, 1, 1, 25, 100, 200, 40)
+        assert action_safe != action_danger 
+    
