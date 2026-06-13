@@ -564,3 +564,20 @@ out body;"""
             print(f"Nearest safe stop error (attempt {attempt+1}): {e}")
             time.sleep(1)
     return []
+
+def validate_coordinates(lat,lon):
+    """Returns (True, None) if valid, (False, error_message) if invalid"""
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return False, "Coordinates must be numbers"
+    
+    if not (-90 <= lat <= 90):
+        return False, f"Latitude must be between -90 and 90, got {lat}"
+    if not (-180 <= lon <= 180):
+        return False, f"Longitude must be between -180 and 180, got {lon}"
+    if lat == 0 and lon == 0:
+        return False, "Coordinates (0,0) are invalid - that's the middle of the ocean"
+    
+    return True, None

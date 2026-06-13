@@ -4,7 +4,7 @@ from main import (build_features, calculate_risk, predict_severity, get_routes,
                   sample_waypoints, get_weather, get_time_features, get_cached_overpass, 
                   init_db, log_risk, log_route, DB_PATH, active_alerts, alert_lock, 
                   check_weather_alerts, start_alert_poller, get_crash_hotspots, 
-                  get_cached_route, cache_route, get_nearest_safe)
+                  get_cached_route, cache_route, get_nearest_safe, validate_coordinates)
 import concurrent.futures, time
 import numpy as np, sqlite3
 from datetime import datetime
@@ -25,8 +25,17 @@ def health():
 
 @app.route("/risk", methods=["GET"])
 def risk():
-    lat = float(request.args.get("lat"))
-    lon = float(request.args.get("lon"))
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+
+    if not lat or not lon:
+        return jsonify({"error": "Missing required parameters: lat, lon"}), 400
+    
+    valid, error = validate_coordinates(lat, lon)
+    if not valid:
+        return jsonify({"error": error}), 400
+    
+    lat, lon = float(lat), float(lon)
 
     features = build_features(lat,lon)
 
@@ -58,8 +67,6 @@ def risk():
         features["temperature"], features["rain"], features["wind_speed"]
     )
 
-
-
     return jsonify({
         "risk_score":score,
         "risk_level":risk_level,
@@ -75,12 +82,25 @@ def risk():
 
 @app.route("/safe_route", methods=["GET"])
 def safe_route():
-    origin_lat = float(request.args.get("olat"))
-    origin_lon = float(request.args.get("olon"))
-    dest_lat = float(request.args.get("dlat"))
-    dest_lon = float(request.args.get("dlon"))
+    olat = float(request.args.get("olat"))
+    olon = float(request.args.get("olon"))
+    dlat = float(request.args.get("dlat"))
+    dlon = float(request.args.get("dlon"))
+      
+    if not all([olat, olon, dlat, dlon]):
+        return jsonify({"error": "Missing required parameters: olat, olon, dlat, dlon"}), 400
+    
+    valid, error = validate_coordinates(olat, olon)
+    if not valid:
+        return jsonify({"error": f"Invalid origin: {error}"}), 400
+    
+    valid, error = validate_coordinates(dlat, dlon)
+    if not valid:
+        return jsonify({"error": f"Invalid destination: {error}"}), 400
+    
+    origin_lat, origin_lon = float (olat), float(olon)
+    dest_lat, dest_lon = float(dlat), float (dlon)
 
-    # Check cache first
     route_id = f"{round(origin_lat,3)}_{round(origin_lon,3)}_{round(dest_lat,3)}_{round(dest_lon,3)}"
     cached = get_cached_route(route_id)
     if cached:
@@ -440,6 +460,15 @@ def risk_trend():
     lat = float(request.args.get("lat"))
     lon = float(request.args.get("lon"))
 
+    if not lat or not lon:
+        return jsonify({"error": "Missing required parameters: lat, lon"}), 400
+    
+    valid, error = validate_coordinates(lat, lon)
+    if not valid:
+        return jsonify({"error": error}), 400
+    
+    lat, lon = float(lat), float(lon)
+
     temperature, rain, wind_speed = get_weather(lat,lon)
     bars, accident_density = get_cached_overpass(lat,lon)
 
@@ -517,9 +546,19 @@ def hotspots():
     })
 
 @app.route("/nearest_safe", methods=["GET"])
-def mearest_safe():
+def nearest_safe():
     lat = float(request.args.get("lat"))
     lon = float(request.args.get("lon"))
+
+    if not lat or not lon:
+        return jsonify({"error": "Missing required parameters: lat, lon"}), 400
+    
+    valid, error = validate_coordinates(lat, lon)
+    if not valid:
+        return jsonify({"error": error}), 400
+    
+    lat, lon = float(lat), float(lon)
+
     radius = int(request.args.get("radius", 3000))
 
     stops = get_nearest_safe(lat, lon, radius)
