@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 
 def compute_accident_density_against(lats, lons, ref_lats, ref_lons, ref_weights, radius_km=1.0):
     """
@@ -143,6 +144,20 @@ def train_model(df):
         n_estimators=100, max_depth=10, random_state=42, n_jobs=-1
     )
     cv_scores = cross_val_score(model_cv, X, y, cv=5, scoring='accuracy')
+    cv_results={
+        "cv_accuracy_mean": round(float(cv_scores.mean()), 4),
+        "cv_accuracy_std": round(float(cv_scores.std()), 4),
+        "cv_scores_per_fold": [round(float(s), 4) for s in cv_scores],
+        "n_folds": 5,
+        "features": features,
+        "training_records": len(df),
+        "model": "RandomForestClassifier",
+        "target": "severity"
+    }
+    with open("cv_results.json", "w") as f:
+        json.dump(cv_results, f, indent=2)
+    print("CV results saved to cv_results.json")
+
     print(f"CV Accuracy: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
     print(f"Per fold: {[round(s,3) for s in cv_scores]}")
 
@@ -205,7 +220,9 @@ def train_model(df):
     print("\nModel saved as model.pkl")
     return model
 
+
 if __name__ == "__main__":
     df = build_training_data()
     if df is not None:
         model = train_model(df)
+

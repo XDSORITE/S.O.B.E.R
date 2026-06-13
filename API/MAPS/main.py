@@ -493,3 +493,74 @@ def cache_route(route_id, data):
         for k in expired:
             del active_routes[k]
     
+def get_nearest_safe(lat, lon, radius=3000):
+    """
+    Find nearest safe stops - parking, police, hospitals within radius
+    """
+
+    url = get_overpass_url()
+    query = f"""[out:json][timeout:25];
+(
+    node["amenity"="parking"](around:{radius},{lat},{lon});
+    node["amenity"="police"](around:{radius},{lat},{lon});
+    node["amenity"="hospital"](around:{radius},{lat},{lon});
+    node["amenity"="clinic"](around:{radius},{lat},{lon});
+    node["highway"="rest_area"](around:{radius},{lat},{lon});
+);
+out body;"""
+    
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": "SOBER-Project/1.0"
+    }
+
+    for attempt in range(2):
+        try:
+            response = requests.post(
+                url, data={"data":query},
+                headers=headers, timeout=30
+            )
+            data = response.json()
+            elements = data.get("elements", [])
+            safe_stops = []
+            for el in elements:
+                el_lat = el.get("lat")
+                el_lon = el.get("lon")
+                if not el_lat or not el_lon:
+                    continue
+
+                R = 6371000
+                dlat = math.radians(el_lat - lat)
+                dlon = math.radians(el_lon - lon)
+                a = math.sin(dlat/2)**2 + math.cos(math.radians(lat)) * math.cos(math.radians(el_lat)) * math.sin(dlon/2)**2
+                distance_m = 2 * R * math.asin(math.sqrt(a))
+
+                tags = el.get("tags", {})
+                amenity = tags.get("amenity", "unknown")
+                name = tags.get("name", amenity.replace("_", "").title())
+
+                safety_priority = {
+                    "police": 1,
+                    "hospital": 2,
+                    "clinic": 3,
+                    "rest_area": 4,
+                    "parking": 5
+                }.get(amenity,6)
+
+                safe_stops.append({
+                    "name": name,
+                    "type": amenity,
+                    "lat": el_lat,
+                    "lon": el_lon,
+                    "distance_m": round(distance_m),
+                    "distance_km": round(distance_m / 1000, 2),
+                    "safety_priority": safety_priority
+                })
+            
+            safe_stops.sort(key=lambda x: (x["safety_priority"], x["distance_m"]))
+            return safe_stops[:10]
+        except Exception as e:
+            print(f"Nearest safe stop error (attempt {attempt+1}): {e}")
+            time.sleep(1)
+    return []

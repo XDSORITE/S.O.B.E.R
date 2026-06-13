@@ -1,16 +1,14 @@
-import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from main import (build_features, calculate_risk, predict_severity, get_routes, 
-                  sample_waypoints, get_bars, get_accident_density, get_weather,
-                    get_time_features, get_cached_overpass, init_db, log_risk, log_route, DB_PATH,
-                    active_alerts, alert_lock, check_weather_alerts, start_alert_poller,
-                    get_crash_hotspots, routes_lock, active_routes, get_cached_route,
-                    cache_route)
+                  sample_waypoints, get_weather, get_time_features, get_cached_overpass, 
+                  init_db, log_risk, log_route, DB_PATH, active_alerts, alert_lock, 
+                  check_weather_alerts, start_alert_poller, get_crash_hotspots, 
+                  get_cached_route, cache_route, get_nearest_safe)
 import concurrent.futures, time
 import numpy as np, sqlite3
-from flask import Response
 from datetime import datetime
+import json, os
 
 
 init_db()
@@ -123,6 +121,8 @@ def safe_route():
                 "lon": wp["lon"],
                 "risk_score": score,
                 "risk_level": level,
+                "reasons": reasons,
+                "action": action
             }
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
@@ -250,7 +250,10 @@ def heatmap():
                 "lon": point["lon"],
                 "risk_score": score,
                 "risk_level": risk_level,
-                "predicted_severity": predicted_severity
+                "reasons": reasons,
+                "action": action,
+                "predicted_severity": predicted_severity,
+                "severity_confidence": confidence
             })
             print(f"Point {i+1}/{len(grid_points)} - score: {score}")
             time.sleep(0.5)
@@ -262,7 +265,10 @@ def heatmap():
                 "lon": point["lon"],
                 "risk_score": 0,
                 "risk_level": "LOW",
-                "predicted_severity": "unknown"
+                "reasons": [],
+                "action": "No action recommended",
+                "predicted_severity": "unknown",
+                "severity_confidence": 0
             }
 
     return jsonify({
@@ -354,7 +360,7 @@ def alerts():
         current_alerts = list(active_alerts)
 
     return jsonify({
-        "total_alerts": len(active_alerts),
+        "total_alerts": len(current_alerts),
         "alerts": current_alerts,
         "monitored_locations": 3,
         "next_check": "Every 30 minutes"
@@ -388,16 +394,28 @@ def ml_stats():
     else:
         importance = {}
         n_estimators = 0
-
+    
+    cv_path = os.path.join(os.path.dirname(__file__), "cv_results.json")
+    try:
+        with open(cv_path) as f:
+            cv_data = json.load(f)
+        cv_accuracy = cv_data.get("cv_accuracy_mean", 0)
+        cv_std = cv_data.get("cv_accuracy_std", 0)
+        training_records = cv_data.get("training_records", 0)
+    except:
+        cv_accuracy = 0
+        cv_std = 0
+        training_records = 0
+    
 
     return jsonify({
         "model": "Random Forest Classifier",
         "version": "2.0",
         "n_estimators": n_estimators,
         "features": features,
-        "training_records": 5000,
-        "cross_validation_accuracy": 0.628,
-        "cv_std": 0.004,
+        "training_records": training_records,
+        "cross_validation_accuracy": cv_accuracy,
+        "cv_std": cv_std,
         "target": "crash_severity",
         "classes": ["property_damage_only", "injury_likely", "fatal_risk"],
         "feature_importance": importance
@@ -445,7 +463,10 @@ def risk_trend():
                 "hour_label": f"{hour:02d}:00",
                 "risk_score": score,
                 "risk_level": risk_level,
-                "predicted_severity": predicted_severity
+                "reasons": reasons,
+                "action": action,
+                "predicted_severity": predicted_severity,
+                "severity_confidence": confidence
             })
             print(f"Hour {hour}: {score} {risk_level}")
         except Exception as e:
@@ -455,7 +476,10 @@ def risk_trend():
                 "hour_label": f"{hour:02d}:00",
                 "risk_score": 0,
                 "risk_level": "LOW",
-                "predicted_severity": "unknown"
+                "reasons": [],
+                "action": "No action recommended",
+                "predicted_severity": "unknown",
+                "severity_confidence": 0
             })
 
 
@@ -492,6 +516,31 @@ def hotspots():
         "hotspots": data
     })
 
+@app.route("/nearest_safe", methods=["GET"])
+def mearest_safe():
+    lat = float(request.args.get("lat"))
+    lon = float(request.args.get("lon"))
+    radius = int(request.args.get("radius", 3000))
+
+    stops = get_nearest_safe(lat, lon, radius)
+
+    if not stops:
+        return jsonify({
+            "message": "No safe stops found nearby",
+            "suggestion": "Increase radius or try a different location",
+            "stops": []
+        })
+    
+    nearest = stops [0]
+
+    return jsonify({
+        "location": {"lat": lat, "lon": lon},
+        "nearest_stop": nearest,
+        "total_found": len(stops),
+        "search_radius_m": radius,
+        "stops": stops,
+        "message": f"Nearest safe stop: {nearest['name']} ({nearest['distance_m']}m away)"
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
