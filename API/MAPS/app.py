@@ -581,5 +581,105 @@ def nearest_safe():
         "message": f"Nearest safe stop: {nearest['name']} ({nearest['distance_m']}m away)"
     })
 
+@app.route("/risk/compare", methods=["GET"])
+def risk_compare():
+    lat1 = request.args.get("lat1")
+    lon1 = request.args.get("lon1")
+    lat2 = request.args.get("lat2")
+    lon2 = request.args.get("lon2")
+
+    if not all([lat1, lon1, lat2, lon2]):
+        return jsonify({"error": "Missing required parameters: lat1, lon1, lat2, lon2"}), 400
+    
+    valid, error = validate_coordinates(lat1, lon1)
+    if not valid:
+        return jsonify({"error": f"Invalid location A: {error}"}), 400
+    
+    valid,error = validate_coordinates(lat2, lon2)
+    if not valid:
+        return jsonify({"error": f"Invalid location B: {error}"}), 400
+    
+    lat1, lon1 = float(lat1), float(lon1)
+    lat2, lon2 = float(lat2), float(lon2)
+
+    features_a = build_features(lat1, lon1)
+    score_a, level_a, reasons_a, action_a = calculate_risk(
+        features_a["hour"], features_a["is_weekend"], features_a["rain"],
+        features_a["wind_speed"], features_a["bars"], features_a["accident_density"],
+        features_a["temperature"]
+    )
+    severity_a, confidence_a = predict_severity(
+        features_a["hour"], features_a["is_weekend"], features_a["temperature"],
+        features_a["rain"], features_a["wind_speed"], features_a["bars"], 
+        features_a["accident_density"]
+    )
+
+    features_b = build_features(lat2, lon2)
+    score_b, level_b, reasons_b, action_b = calculate_risk(
+        features_b["hour"], features_b["is_weekend"], features_b["rain"],
+        features_b["wind_speed"], features_b["bars"], features_b["accident_density"],
+        features_b["temperature"]
+    )
+    severity_b, confidence_b = predict_severity(
+        features_b["hour"], features_b["is_weekend"], features_b["temperature"],
+        features_b["rain"], features_b["wind_speed"], features_b["bars"],
+        features_b["accident_density"]
+    )
+
+    safer = "A" if score_a < score_b else "B" if score_b < score_a else "EQUAL"
+    difference = abs(score_a - score_b)
+
+    if safer == "A":
+        recommendation = f"Location A is safer by {difference} points"
+    elif safer == "B":
+        recommendation = f"Location B is safer by {difference} points"
+    else:
+        recommendation = "Both locations have equal risk"
+    
+    return jsonify({
+        "location_a":{
+            "lat": lat1, "lon": lon1,
+            "risk_score": score_a,
+            "risk_level": level_a,
+            "reasons": reasons_a,
+            "action": action_a,
+            "predicted_severity": severity_a,
+            "severity_confidence": confidence_a
+        },
+        "location_b": {
+            "lat": lat2, "lon": lon2,
+            "risk_score": score_b,
+            "risk_level": level_b,
+            "reasons": reasons_b,
+            "action": action_b,
+            "predicted_severity": severity_b,
+            "severity_confidence": confidence_b
+        },
+        "safer_location": safer,
+        "risk_difference": difference,
+        "recommendation": recommendation
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     app.run(debug=True)
