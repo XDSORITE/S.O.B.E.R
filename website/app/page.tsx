@@ -1,23 +1,36 @@
+"use client";
+import { useState } from "react";
 import Sidebar from "./components/Sidebar";
-import TopBar from "./components/TopBar";
+import DashboardView from "./components/DashboardView";
 import RiskMap from "./components/RiskMap";
-import DriverMonitor from "./components/DriverMonitor";
-import AlertsPanel from "./components/AlertsPanel";
-import RouteRisk from "./components/RouteRisk";
+import DriversView from "./components/RiskMap";
+import AlertsView from "./components/AlertsView";
+import AnalyticsView from "./components/AnalyticsView";
+import SettingsView from "./components/SettingsView";
+
 export default function Home() {
-  return(
-    <main className="flex-1 bg-[#0B0F19] text-white h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col p-4 gap-4">
-        <TopBar />
-        <div className="h-[600] rounded-2x1 overflow-hidden border border-white/10">
-        <RiskMap />
-        </div>
-        <div className="grid grid-cols-3 gap-4 h-[40%]">
-          <DriverMonitor />
-          <AlertsPanel />
-          <RouteRisk />
-        </div>
+  const [active, setActive] = useState("Dashboard");
+  const renderView = () => {
+    switch (active) {
+      case "Risk Map":
+        return <RiskMap />;
+      case "Drivers":
+        return <DriversView />;
+      case "Alerts":
+        return <AlertsView />;
+      case "Analytics":
+        return <AnalyticsView />;
+      case "Settings":
+        return <SettingsView />;
+      default:
+        return <DashboardView />;
+    }
+  };
+  return (
+    <main className="flex h-screen bg-[#020617] text-white overflow-hidden">
+      <Sidebar active={active} setActive={setActive} />
+      <div className="flex-1 overflow-y-auto p-6">
+        {renderView()}
       </div>
     </main>
   );
