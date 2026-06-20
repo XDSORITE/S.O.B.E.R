@@ -506,7 +506,7 @@ class TestCalculateRiskAction:
 
 class TestSampleWaypointsAdditional:
 
-    def tesyt_large_geometry_sampled_correctly(self):
+    def test_large_geometry_sampled_correctly(self):
         coords = [[-73.0 + i*0.001, 40.0 + i*0.001] for i in range(200)]
         geometry = {"coordinates": coords}
         result = sample_waypoints(geometry, num_points=6)
@@ -580,6 +580,4 @@ class TestValidateCoordinatesStress:
         for lat, lon in invalid:
             valid, _ = validate_coordinates(lat, lon)
             assert valid is False, f"({lat}, {lon}) should be invalid"
-
-
     
