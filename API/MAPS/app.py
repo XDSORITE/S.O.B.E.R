@@ -82,11 +82,11 @@ def risk():
 
 @app.route("/safe_route", methods=["GET"])
 def safe_route():
-    olat = float(request.args.get("olat"))
-    olon = float(request.args.get("olon"))
-    dlat = float(request.args.get("dlat"))
-    dlon = float(request.args.get("dlon"))
-      
+    olat = request.args.get("olat")
+    olon = request.args.get("olon")
+    dlat = request.args.get("dlat")
+    dlon = request.args.get("dlon")
+
     if not all([olat, olon, dlat, dlon]):
         return jsonify({"error": "Missing required parameters: olat, olon, dlat, dlon"}), 400
     
