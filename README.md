@@ -351,3 +351,9 @@ Outputs:
 ## Built for Horizons hackathon
 
 S.O.B.E.R targets the road safety and DUI prevention problem space, specificalyl designed as a commercial API for rideshare companies and city transit auhtorities.
+
+---
+
+## AI USAGE
+
+AI was mostly used to write code for training the ML model and some Flask components
