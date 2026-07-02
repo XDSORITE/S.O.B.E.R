@@ -1,7 +1,7 @@
 # S.O.B.E.R
 ### System for Optimal Behaviour and Environment Risk
 
-It's an AI-powered road safety system that predicts and prevents DUI-related collisions in real time by combining live environmental risk scoring, driver fatigue detection, and intelligent safe routing.
+It's an AI-powered road safety system that predicts and prevents DUI-related collisions in real time by combining live environmental risk scoring, driver fatigue detection, and location based risk like bar's, casinos and etc.
 
 ---
 
@@ -25,7 +25,7 @@ S.O.B.E.R consists of three integrated modules:
 
 | Module | Description | Status |
 | ------ | ----------- | ------ |
-| **A - External Risk Engine** | Live risk scoring using weather, nightlife, crash history, and time data | Complete |
+| **A - Risk Engine** | Live risk scoring using weather, nightlife, crash history, and time data | Complete |
 | **B - Driver Monitoring** | Real-time fatigue detection via webcam and computer vision | Ongoing |
 | **C - Fusion Decision Layer** | Combines A + B into a signle final safety decision | Ongoing |
 
@@ -61,34 +61,11 @@ The API will start at `http://127.0.0.1:5000`
 ### 4. Frontend (Framer)
 The frontend is built in Framer and runs seperately. Open the Framer project at `https://diplomatic-sphere-494084.framer.app/`.
 Make sure backend is running first before opening Framer
+Framer website still completing to add all the features
 
 ---
 
-### Project Structure 
-
-```
-S.O.B.E.R/
-├── API/
-│   └── MAPS/
-│       ├── app.py              # Flask API server
-│       ├── main.py             # Core logic, ML model, data fetching
-│       ├── train.py            # ML model training pipeline
-│       ├── collect_data.py     # NYC crash data collection
-│       ├── crashes.csv         # 50,000 real NYC crash records
-│       ├── model.pkl           # Trained Random Forest model
-│       ├── cv_results.json     # Cross-validation results
-│       ├── confusion_matrix.png
-│       ├── feature_importance.png
-│       ├── sober.db            # SQLite analytics database
-│       ├── test_sober.py       # Unit tests (102 tests)
-│       ├── test_api_integration.py  # Integration tests (17 tests)
-|       └── requirements.text
-└── README.md
-```
- 
----
-
-## API Endpoints 
+## API Endpoints:
 
 **Base URL:** `https://s-o-b-e-r.onrender.com`
 **Local URL:** `http://127.0.0.1:5000` (requires pulling code from github, follow ## Quick Start)
