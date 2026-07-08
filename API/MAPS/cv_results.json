@@ -1,0 +1,27 @@
+{
+  "cv_accuracy_mean": 0.6252,
+  "cv_accuracy_std": 0.0072,
+  "cv_scores_per_fold": [
+    0.633,
+    0.625,
+    0.613,
+    0.623,
+    0.632
+  ],
+  "n_folds": 5,
+  "features": [
+    "hour",
+    "is_weekend",
+    "temperature",
+    "rain",
+    "wind_speed",
+    "bars",
+    "accident_density",
+    "time_of_day",
+    "is_night",
+    "is_rush_hour"
+  ],
+  "training_records": 5000,
+  "model": "RandomForestClassifier",
+  "target": "severity"
+}
