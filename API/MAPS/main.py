@@ -10,6 +10,9 @@ routes_lock = threading.Lock()
 active_routes = {}
 ROUTE_CACHE_EXPIRY = 300
 DB_PATH = os.path.join(os.path.dirname(__file__), "sober.db")
+_overpass_cache = {}
+OVERPASS_CACHE_EXPIRY = 21600
+
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 try:
@@ -21,6 +24,7 @@ except Exception as e:
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter"
 ]
 
 def get_overpass_url():
@@ -146,21 +150,24 @@ out count;"""
 def get_cached_overpass(lat,lon):
     key = (round(lat,2), round(lon,2))
     if key in _overpass_cache:
-        print(f"Cache hit for {key}")
-        return _overpass_cache[key]
-    bars = get_bars(lat,lon, radius = 1000)
-    accident_density = get_accident_density(lat, lon, radius=2000)
-    _overpass_cache[key] = (bars, accident_density)
-    return bars, accident_density
-
-_overpass_cache = {}
+        cached = _overpass_cache[key]
+        if time.time() - cached["time"] < OVERPASS_CACHE_EXPIRY:
+            print(f"Overpass cache hit: {key}")
+            return cached["data"]
+    bars = get_bars(lat, lon)
+    accident_density = get_accident_density(lat, lon)
+    data = (bars, accident_density)
+    _overpass_cache[key] = {
+        "time": time.time(),
+        "data": data
+    }
+    return data
 
 def build_features(lat, lon):
     hour, day_of_week, is_weekend = get_time_features()
     time_of_day, is_night, is_rush_hour = get_engineered_time_features(hour)
     temperature, rain, wind_speed = get_weather(lat, lon)
-    bars = get_bars(lat, lon)
-    accident_density = get_accident_density(lat, lon)
+    bars, accident_density = get_cached_overpass(lat, lon)
     return {
         "hour": hour,
         "day_of_week": day_of_week,
