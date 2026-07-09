@@ -53,8 +53,14 @@ def get_weather(lat, lon):
             f"?latitude={lat}&longitude={lon}"
             "&current=temperature_2m,weather_code,wind_speed_10m"
         )
+        print("Calling Open-Meteo:", url)
         response = requests.get(url, timeout=5)
+        print("Status code:", response.status_code)
+        print("Response:", response.text[:500])
         data = response.json()
+        if "current" not in data:
+            print("Missing current data:", data)
+            return 20, 0, 0  
         current = data["current"]
         temperature = current["temperature_2m"]
         weather_code = current["weather_code"]
