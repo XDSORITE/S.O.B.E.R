@@ -2,6 +2,7 @@ import requests, time, random, math, joblib, os, numpy as np, sqlite3
 from datetime import datetime
 import pandas as pd
 import threading
+from functools import lru_cache
 
 active_alerts = []
 alert_lock = threading.Lock()
@@ -46,30 +47,43 @@ def get_engineered_time_features(hour):
     is_rush_hour = 1 if ((7 <= hour <= 9) or (17 <= hour <= 19)) else 0
     return time_of_day, is_night, is_rush_hour
 
+weather_cache = {}
 def get_weather(lat, lon):
     try:
+        key = f"{lat},{lon}"
+        if key in weather_cache:
+            if time.time() - weather_cache[key]["time"] < 600:
+                return weather_cache[key]["data"]
         url = (
             "https://api.open-meteo.com/v1/forecast"
             f"?latitude={lat}&longitude={lon}"
             "&current=temperature_2m,weather_code,wind_speed_10m"
         )
-        print("Calling Open-Meteo:", url)
-        response = requests.get(url, timeout=5)
-        print("Status code:", response.status_code)
-        print("Response:", response.text[:500])
+        response = requests.get(url, timeout=10)
         data = response.json()
         if "current" not in data:
-            print("Missing current data:", data)
-            return 20, 0, 0  
+            print("Weather failed:", data)
+            return 20, 0, 0
+        
         current = data["current"]
-        temperature = current["temperature_2m"]
-        weather_code = current["weather_code"]
-        wind_speed = current["wind_speed_10m"]
-        rain = 1 if weather_code in [51,53,55,61,63,65,80,81,82] else 0
-        return temperature, rain, wind_speed
+
+        result = (
+            current["temperature_2m"],
+            1 if current["weather_code"] in [51,53,55,61,63,65,80,81,82] else 0,
+            current["wind_speed_10m"]
+        )
+
+        weather_cache[key] = {
+            "time": time.time(),
+            "data": result
+        }
+
+        return result
+
     except Exception as e:
-        print(f"Weather error: {e}")
+        print("Weather error:", e)
         return 20, 0, 0
+
 
 def get_bars(lat, lon, radius=1000):
     cache_key = f"bars_{round(lat,3)}_{round(lon,3)}"
