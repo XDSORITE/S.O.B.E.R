@@ -3,7 +3,9 @@ from datetime import datetime
 import pandas as pd
 import threading
 from functools import lru_cache
+from dotenv import load_dotenv
 
+load_dotenv("API_KEY.env")
 active_alerts = []
 alert_lock = threading.Lock()
 routes_lock = threading.Lock()
@@ -13,6 +15,9 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "sober.db")
 _overpass_cache = {}
 OVERPASS_CACHE_EXPIRY = 21600
 
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
+_weather_cache = {}
+WEATHER_CACHE_EXPIRY = 600
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 try:
@@ -51,41 +56,37 @@ def get_engineered_time_features(hour):
     is_rush_hour = 1 if ((7 <= hour <= 9) or (17 <= hour <= 19)) else 0
     return time_of_day, is_night, is_rush_hour
 
-weather_cache = {}
+
 def get_weather(lat, lon):
+    cache_key = (round(lat,2), round(lon,2))
+    cached = _weather_cache.get(cache_key)
+    if cached and time.time() - cached["time"] < WEATHER_CACHE_EXPIRY:
+        return cached["data"]
     try:
-        key = f"{lat},{lon}"
-        if key in weather_cache:
-            if time.time() - weather_cache[key]["time"] < 600:
-                return weather_cache[key]["data"]
         url = (
-            "https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lon}"
-            "&current=temperature_2m,weather_code,wind_speed_10m"
+            "https://api.weatherapi.com/v1/current.json"
+            f"?key={WEATHER_API_KEY}&q={lat},{lon}&aqi=no"
         )
         response = requests.get(url, timeout=10)
         data = response.json()
-        if "current" not in data:
-            print("Weather failed:", data)
-            return 20, 0, 0
-        
+        if "error" in data:
+            raise Exception(data["error"].get("message", "Unknown WeatherAPI error"))
         current = data["current"]
+        temperature = current["temp_c"]
+        wind_speed = current["wind_kph"]
+        condition_code = current["condition"]["code"]
 
-        result = (
-            current["temperature_2m"],
-            1 if current["weather_code"] in [51,53,55,61,63,65,80,81,82] else 0,
-            current["wind_speed_10m"]
-        )
-
-        weather_cache[key] = {
-            "time": time.time(),
-            "data": result
-        }
-
+        rain_codes = [1063,1150,1153,1168,1171,1180,1183,1186,1189,1192,1195,
+                      1198,1201,1240,1243,1246,1273,1276]
+        rain = 1 if condition_code in rain_codes else 0
+        result = (temperature, rain, wind_speed)
+        _weather_cache[cache_key] = {"data": result, "time": time.time()}
         return result
 
     except Exception as e:
-        print("Weather error:", e)
+        print(f"Weather error: {e}")
+        if cached:
+            return cached["data"]
         return 20, 0, 0
 
 
