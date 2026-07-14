@@ -388,6 +388,53 @@ def log_route(origin_lat, origin_lon, dest_lat, dest_lon, routes_returned, recom
     except Exception as e:
         print(f"DB route log error: {e}")
 
+def evaluate_weather_alerts(location_name, lat, lon):
+    """Run threshold checks for a single location and return any alerts."""
+    temperature, rain, wind_speed = get_weather(lat, lon)
+    alerts_for_loc = []
+
+    if rain:
+        alerts_for_loc.append({
+            "type": "RAIN",
+            "severity": "HIGH",
+            "message": f"Rain detected at {location_name} - reduced visibility, increased crash risk"
+        })
+    if wind_speed > 30:
+        alerts_for_loc.append({
+            "type": "HIGH_WIND",
+            "severity": "HIGH",
+            "message": f"High winds ({wind_speed} km/h) at {location_name} - dangerous driving conditions"
+        })
+    elif wind_speed > 20:
+        alerts_for_loc.append({
+            "type": "MODERATE_WIND",
+            "severity": "MEDIUM",
+            "message": f"Moderate winds ({wind_speed} km/h) at {location_name} - drive with caution"
+        })
+    if temperature >= 38:
+        alerts_for_loc.append({
+            "type": "EXTREME_HEAT",
+            "severity": "HIGH",
+            "message": f"Extreme heat ({temperature}°C) at {location_name} - risk of tyre blowouts and driver fatigue"
+        })
+    if rain and wind_speed > 20:
+        alerts_for_loc.append({
+            "type": "SEVERE_CONDITIONS",
+            "severity": "CRITICAL",
+            "message": f"Combined rain + high wind at {location_name} - avoid driving if possible"
+        })
+    
+    for alert in alerts_for_loc:
+        alert["location"] = location_name
+        alert["lat"] = lat
+        alert["lon"] = lon
+        alert["temperature"] = temperature    
+        alert["wind_speed"] = wind_speed
+        alert["rain"] = bool(rain)
+        alert["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+    return alerts_for_loc
+
 def check_weather_alerts(locations=None):
     """"
     Poll weather for a set of monitored locations.
@@ -404,55 +451,12 @@ def check_weather_alerts(locations=None):
     new_alerts = []
     for loc in locations:
         try:
-            temperature, rain, wind_speed = get_weather(loc["lat"], loc["lon"])
-            alerts_for_loc = []
-
-            if rain:
-                alerts_for_loc.append({
-                    "type":"RAIN",
-                    "severity":"HIGH",
-                    "message": f"Rain detected at  {loc['name']} - reduced visiblity, increased crash risk"
-                })
-            if wind_speed > 30:
-                alerts_for_loc.append({
-                    "type":"HIGH_WIND",
-                    "severity":"HIGH",
-                    "message": f"High winds ({wind_speed} km/h) at {loc['name']} - dangerous driving conditions"
-                })
-            elif wind_speed > 20:
-                alerts_for_loc.append({
-                    "type":"MODERATE_WIND",
-                    "severity": "MEDIUM",
-                    "message": f"Moderate winds ({wind_speed} km/h) at {loc['name']} - drive with caution"
-                })
-            if temperature >=38:
-                alerts_for_loc.append({
-                    "type": "EXTREME_HEAT",
-                    "severity": "HIGH",
-                    "message": f"Extreme heat ({temperature}°C) at {loc['name']} - risk of tyre blowouts and driver fatigue"
-                })
-            if rain and wind_speed > 20:
-                alerts_for_loc.append({
-                    "type": "SEVER_CONDITIONS",
-                    "severity": "CRITICAL",
-                    "message": f"Combined rain + high wind at {loc['name']} - avoid driving if possible"
-                })
-            
-            for alert in alerts_for_loc:
-                alert["location"] = loc["name"]
-                alert["lat"] = loc["lat"]
-                alert["lon"] = loc["lon"]
-                alert["temperature"] = temperature
-                alert["wind_speed"] = wind_speed
-                alert["rain"] = bool(rain)
-                alert["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                new_alerts.append(alert)
-
+            alerts_for_loc = evaluate_weather_alerts(loc["name"], loc["lat"], loc["lon"] )
+            new_alerts.extend(alerts_for_loc)
             print(f"Alert check: {loc['name']} - {len(alerts_for_loc)} alerts")
-
         except Exception as e:
             print(f"Alert check error for {loc['name']}: {e}")
-    
+
     with alert_lock:
         active_alerts.clear()
         active_alerts.extend(new_alerts)

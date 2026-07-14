@@ -4,7 +4,8 @@ from main import (build_features, calculate_risk, predict_severity, get_routes,
                   sample_waypoints, get_weather, get_time_features, get_cached_overpass, 
                   init_db, log_risk, log_route, DB_PATH, active_alerts, alert_lock, 
                   check_weather_alerts, start_alert_poller, get_crash_hotspots, 
-                  get_cached_route, cache_route, get_nearest_safe, validate_coordinates)
+                  get_cached_route, cache_route, get_nearest_safe, validate_coordinates,
+                  evaluate_weather_alerts)
 import concurrent.futures, time
 import numpy as np, sqlite3
 from datetime import datetime
@@ -386,15 +387,59 @@ def alerts():
         "next_check": "Every 30 minutes"
     })
 
-@app.route("/alerts/check", methods=["GET"])
-def alerts_check():
-    """Manually trigger an alert check"""
-    new_alerts = check_weather_alerts()
+@app.route("/alerts/check_location", methods=["GET"])
+def alerts_check_location():
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+    name = request.args.get("name", "Custom Location")
+
+    if not lat or not lon:
+        return jsonify({"error": "Missing required parameters: lat, lon"}), 400
+    
+    valid, error = validate_coordinates(lat, lon)
+    if not valid:
+        return jsonify({"error": error}), 400
+    
+    lat, lon = float(lat), float(lon)
+    temperature, rain, wind_speed = get_weather(lat, lon)
+    alerts_for_loc = []
+    
+    if rain:
+        alerts_for_loc.append({"type": "RAIN", "severity": "HIGH",
+            "message": f"Rain detected at {name} - reduced visibility, increased crash risk"})
+    if wind_speed > 30:
+        alerts_for_loc.append({"type": "HIGH_WIND", "severity": "HIGH",
+            "message": f"High winds ({wind_speed} km/h) at {name} - dangerous driving conditions"})
+    elif wind_speed > 20:
+        alerts_for_loc.append({"type": "MODERATE_WIND", "severity": "MEDIUM",
+            "message": f"Moderate winds ({wind_speed} km/h) at {name} - drive with caution"})
+    if temperature >= 38:
+        alerts_for_loc.append({"type": "EXTREME_HEAT", "severity": "HIGH",
+            "message": f"Extreme heat ({temperature}°C) at {name} - risk of tyre blowouts and driver fatigue"})
+    if rain and wind_speed > 20:
+        alerts_for_loc.append({"type": "SEVERE_CONDITIONS", "severity": "CRITICAL",
+            "message": f"Combined rain + high wind at {name} - avoid driving if possible"})
+    
+    for alert in alerts_for_loc:
+        alert["location"] = name
+        alert["lat"] = lat
+        alert["lon"] = lon
+        alert["temperature"] = temperature
+        alert["wind_speed"] = wind_speed
+        alert["rain"] = bool(rain)
+        alert["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     return jsonify({
-        "total_alerts": len(new_alerts),
-        "alerts": new_alerts,
-        "message": "Alert check completed"
+        "location": {"name": name, "lat": lat, "lon": lon},
+        "total_alerts": len(alerts_for_loc),
+        "alerts": alerts_for_loc,
+        "message": "Location check completed"
     })
+
+    
+
+
+
 
 @app.route("/ml/stats", methods=["GET"])
 def ml_stats():
