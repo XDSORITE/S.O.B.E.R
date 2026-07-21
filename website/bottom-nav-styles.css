@@ -1,0 +1,138 @@
+/* ==========================================================================
+   S.O.B.E.R Route Planning Site — Bottom Nav & Mobile Responsive Overrides
+   ==========================================================================
+   Reference file for the bottom navigation bar and key mobile-first styles.
+   Intended to be imported alongside the main styles.css redesign.
+   ========================================================================== */
+
+/* ==========================================================================
+   Bottom Navigation Bar (Mobile Only)
+   ==========================================================================
+   Fixed bottom nav that replaces the desktop sidebar/header nav on small
+   screens. Hidden on desktop (> 768px), shown as a 56px bar on mobile.
+   Uses env(safe-area-inset-bottom) for iPhone home indicator spacing.
+   ========================================================================== */
+
+/* Hidden on desktop by default */
+.bottom-nav {
+	display: none;
+}
+
+/* Show on mobile */
+@media (max-width: 768px) {
+	.bottom-nav {
+		display: flex;
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 56px;
+		background: var(--color-bg-surface, rgb(13, 24, 42));
+		border-top: 1px solid var(--color-border, rgb(75, 85, 99));
+		justify-content: space-around;
+		align-items: center;
+		z-index: 100;
+		padding-bottom: env(safe-area-inset-bottom, 0);
+		/* Safe area padding for iPhone home indicator */
+	}
+
+	.bottom-nav-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		min-height: 48px;
+		min-width: 48px;
+		padding: 6px 12px;
+		color: var(--color-text-muted, rgb(160, 160, 160));
+		text-decoration: none;
+		font-family: var(--font-ui, "Inter", sans-serif);
+		font-size: 11px;
+		transition: color 0.2s ease;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.bottom-nav-item.active {
+		color: var(--color-brand, #2BB884);
+	}
+
+	.bottom-nav-item:active {
+		opacity: 0.7;
+	}
+
+	.bottom-nav-item svg {
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+	}
+
+	.bottom-nav-label {
+		font-size: 11px;
+		line-height: 1;
+		white-space: nowrap;
+	}
+
+	/* Adjust main content to account for bottom nav */
+	.main-content {
+		padding-bottom: 70px;
+	}
+
+	/* Header hide/show on scroll */
+	.header.header--hidden {
+		transform: translateY(-100%);
+	}
+
+	.header {
+		transition: transform 0.3s ease;
+	}
+}
+
+/* ==========================================================================
+   Key Mobile Responsive Overrides
+   ==========================================================================
+   Targeted overrides for mobile viewports that complement the main CSS
+   redesign. These handle layout stacking, touch targets, iOS input zoom
+   prevention, and typography readability at small sizes.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+	/* Route cards stack vertically on mobile */
+	.route-content {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 12px;
+	}
+
+	.route-divider {
+		display: none;
+	}
+
+	.route-right {
+		flex-direction: column;
+		gap: 12px;
+		width: 100%;
+	}
+
+	/* Input font size for iOS (prevent zoom) — must be >= 16px */
+	.form-input {
+		font-size: 16px !important;
+	}
+
+	/* Button touch targets — minimum 44x44 per WCAG/Apple HIG */
+	.route-select-btn,
+	.coming-soon-close {
+		min-height: 44px;
+		min-width: 44px;
+	}
+
+	/* Risk tag readable size */
+	.risk-tag {
+		font-size: 12px;
+	}
+
+	/* Recommended badge readable */
+	.recommended-badge {
+		font-size: 10px;
+	}
+}
