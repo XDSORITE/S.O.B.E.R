@@ -4,7 +4,7 @@
 
 
 
-    var API_BASE = 'https://s-o-b-e-r.onrender.com';
+    var API_BASE = 'https://sober.technebula.top';
 
     function handleRouteSearch() {
     var from = window.selectedFrom;
