@@ -436,11 +436,6 @@ def alerts_check_location():
         "message": "Location check completed"
     })
 
-    
-
-
-
-
 @app.route("/ml/stats", methods=["GET"])
 def ml_stats():
     from main import severity_model

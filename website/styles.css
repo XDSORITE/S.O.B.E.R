@@ -1362,3 +1362,22 @@ body {
 .coming-soon-close:hover {
     transform: scale(1.05);
 }
+
+/* Block hover animations and visual selections on unavailable cards */
+.route-card-inner.unavailable {
+    opacity: 0.35 !important;
+    filter: grayscale(80%) !important;
+    border-style: dashed !important;
+    border-color: rgb(55, 65, 81) !important;
+    box-shadow: none !important;
+}
+
+.route-card-inner.unavailable:hover {
+    transform: none !important;
+    opacity: 0.45 !important;
+}
+
+.route-card-inner.unavailable .route-select-btn {
+    background: #374151 !important;
+    color: #9CA3AF !important;
+}
