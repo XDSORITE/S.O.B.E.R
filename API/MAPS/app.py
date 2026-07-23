@@ -9,8 +9,14 @@ from main import (build_features, calculate_risk, predict_severity, get_routes,
 import concurrent.futures, time
 import numpy as np, sqlite3
 from datetime import datetime
-import json, os
+import json, os, signal
 
+
+class RouteTimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise RouteTimeoutError("Route calculation timed out")
 
 init_db()
 check_weather_alerts()
@@ -83,6 +89,7 @@ def risk():
 
 @app.route("/safe_route", methods=["GET"])
 def safe_route():
+    signal.alarm(55)
     olat = request.args.get("olat")
     olon = request.args.get("olon")
     dlat = request.args.get("dlat")
@@ -112,6 +119,8 @@ def safe_route():
     if not routes:
         return jsonify({"error": "No routes found"}), 500
 
+    hour, day_of_week, is_weekend = get_time_features()
+
     def score_route(route):
         geometry = route.get("geometry", [])
         waypoints = sample_waypoints(geometry) if geometry else []
@@ -131,7 +140,6 @@ def safe_route():
         bars, accident_density = get_cached_overpass(mid["lat"], mid["lon"])
 
         def score_point(wp):
-            hour, day_of_week, is_weekend = get_time_features()
             temperature, rain, wind_speed = get_weather(wp["lat"], wp["lon"])
             score, level, reasons, action = calculate_risk(
                 hour, is_weekend, rain, wind_speed,
@@ -146,7 +154,7 @@ def safe_route():
                 "action": action
             }
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             scored_waypoints = list(executor.map(score_point, waypoints))
 
         scores = [w["risk_score"] for w in scored_waypoints]
@@ -188,12 +196,41 @@ def safe_route():
             unique_routes.append(r)
     scored_routes = unique_routes
 
-    # Sort safest first
-    scored_routes.sort(key=lambda r: r["average_risk"])
+    if len(scored_routes) >= 2:
+        by_risk = sorted(scored_routes, key=lambda r: r["average_risk"])
+        by_time = sorted(scored_routes, key=lambda r: r["duration_min"])
+        max_time = max(r["duration_min"] for r in scored_routes) or 1
+        for r in scored_routes:
+            r["_composite"] = r["average_risk"] * 0.6 + (r["duration_min"] / max_time * 100) * 0.4
+        by_composite = sorted(scored_routes, key=lambda r: r["_composite"])
 
-    # Rank correctly
-    for i, r in enumerate(scored_routes):
-        r["rank"] = i + 1
+        tagged = set()
+        for r in by_risk:
+            if id(r) not in tagged:
+                r["route_type"] = "safest"
+                tagged.add(id(r))
+                break
+        for r in by_time:
+            if id(r) not in tagged:
+                r["route_type"] = "fastest"
+                tagged.add(id(r))
+                break
+        for r in by_composite:
+            if id(r) not in tagged:
+                r["route_type"] = "balanced"
+                tagged.add(id(r))
+                break
+        for r in scored_routes:
+            if id(r) not in tagged:
+                r["route_type"] = "alternative"
+                tagged.add(id(r))
+    elif len(scored_routes) == 1:
+        scored_routes[0]["route_type"] = "safest"
+
+    for r in scored_routes:
+        r.pop("_composite", None)
+
+    scored_routes.sort(key=lambda r: r["average_risk"])
 
     best = scored_routes[0]
     worst = scored_routes[-1]
@@ -215,7 +252,7 @@ def safe_route():
         "recommended_route": 0,
         "total_routes": len(scored_routes),
         "recommendation": {
-            "text": f"Route {best['rank']} is the safest choice",
+            "text": f"Route {best.get('route_type', 'safest').title()} is the safest choice",
             "risk_reduction": round(worst["average_risk"] - best["average_risk"])
         },
         "routes": scored_routes
@@ -226,6 +263,7 @@ def safe_route():
         "last_updated": time.time()
     })
 
+    signal.alarm(0)
     return jsonify(response_data)
 
 @app.route("/heatmap", methods=["GET"])

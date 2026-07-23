@@ -10,12 +10,11 @@ The name reflects the system's purpose: keeping drivers aware, informed, and saf
 
 # URL'S
 
-| Component | URL |
-|-----------|-----|
-| Backend API | https://s-o-b-e-r.onrender.com |
-| Frontend | https://sober.technebula.top/ |
-
-API is live (The API end points doc will be released later):
+> [!IMPORTANT]
+> Before deploying, update the backend URL in the following files:
+> - `website/app.js` — change `API_BASE` to point to your deployed backend
+> - `website/index.html` — update the CSP `connect-src` to allow your backend domain
+> - `docker-compose.yml` — update `Host()` rules to match your domain
 
 ---
 
@@ -32,13 +31,37 @@ It has 3 main steps:
 
 # Quick Start
 
-Currently not all features are fully added to the website and central backend and API.
+## Running Locally
 
-We have a rudimentary version of the website at:
+### Prerequisites
+- Python 3.11+
 
-https://diplomatic-sphere-494084.framer.app/
+### Backend API
+```bash
+cd API/MAPS
+pip install -r requirements.txt
+python app.py
+```
+The API will start on `http://localhost:5000`.
 
-We will add later support to run it locally
+### Frontend
+The `website/` folder contains static HTML/JS/CSS. Serve it with any web server:
+```bash
+cd website
+python -m http.server 8080
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/risk?lat=...&lon=...` | GET | Risk assessment for a location |
+| `/safe_route?olat=...&olon=...&dlat=...&dlon=...` | GET | Safe route between two points |
+| `/heatmap?lat1=...&lon1=...&lat2=...&lon2=...` | GET | Risk heatmap grid |
+| `/hotspots` | GET | Top crash hotspots |
+| `/stats` | GET | Usage statistics |
+| `/alerts` | GET | Active weather alerts |
 
 > [!WARNING]
 > # Disclosure Notice

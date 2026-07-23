@@ -67,7 +67,7 @@ def get_weather(lat, lon):
             "https://api.weatherapi.com/v1/current.json"
             f"?key={WEATHER_API_KEY}&q={lat},{lon}&aqi=no"
         )
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)
         data = response.json()
         if "error" in data:
             raise Exception(data["error"].get("message", "Unknown WeatherAPI error"))
@@ -108,7 +108,7 @@ out count;"""
     }
     for attempt in range(2):
         try:
-            response = requests.post(url, data={"data": query}, headers=headers, timeout=30)
+            response = requests.post(url, data={"data": query}, headers=headers, timeout=8)
             data = response.json()
             count = int(data.get("elements", [{}])[0].get("tags", {}).get("total", 0))
             _overpass_cache[cache_key] = count
@@ -137,7 +137,7 @@ out count;"""
     }
     for attempt in range(2):
         try:
-            response = requests.post(url, data={"data": query}, headers=headers, timeout=30)
+            response = requests.post(url, data={"data": query}, headers=headers, timeout=8)
             data = response.json()
             count = int(data.get("elements", [{}])[0].get("tags", {}).get("total", 0))
             _overpass_cache[cache_key] = count
@@ -301,7 +301,7 @@ def get_routes(origin_lat, origin_lon, dest_lat, dest_lon):
         f"?alternatives=3&geometries=geojson&overview=full"
     )
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)
         data = response.json()
         if data.get("code") != "Ok":
             return []
@@ -551,7 +551,7 @@ out body;"""
         try:
             response = requests.post(
                 url, data={"data":query},
-                headers=headers, timeout=30
+                headers=headers, timeout=8
             )
             data = response.json()
             elements = data.get("elements", [])
