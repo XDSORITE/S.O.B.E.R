@@ -13,7 +13,7 @@ The name reflects the system's purpose: keeping drivers aware, informed, and saf
 | Component | URL |
 |-----------|-----|
 | Backend API | https://s-o-b-e-r.onrender.com |
-| Frontend | https://diplomatic-sphere-494084.framer.app/ |
+| Frontend | https://sober.technebula.top/ |
 
 API is live (The API end points doc will be released later):
 
